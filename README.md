@@ -1,6 +1,6 @@
 # quiz-scorer
 
-A simple slackbot to post new quizzes and keep track of users' scores.
+A simple slackbot to post new stuff quizzes and keep track of users' scores.
 
 ## Installing
 
