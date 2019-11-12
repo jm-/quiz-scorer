@@ -57,28 +57,34 @@ def get_user_name(user_id, web_client):
 
 
 def add_reaction(name, channel_id, ts, web_client):
-    web_client.reactions_add(
-        name=name,
-        channel=channel_id,
-        timestamp=ts
-    )
-
-
-def parse_text_for_score(text):
     try:
-        match = re.search(r'([0-9]{1,2})/15', text)
+        web_client.reactions_add(
+            name=name,
+            channel=channel_id,
+            timestamp=ts
+        )
+    except Exception as e:
+        print(f'exception while adding reaction: {e}')
+
+
+def parse_text_for_scores(text):
+    try:
+        text_scores = re.findall(r'([0-9]{1,2})/15', text)
     except Exception as e:
         print(f'exception parsing text for score: {e} ({text})')
         return None
 
-    if not match:
-        return None
-    score = int(match.group(1))
-    if score < 0:
-        return None
-    if score > 15:
-        return None
-    return score
+    if not text_scores:
+        return []
+    scores = []
+    for text_score in text_scores:
+        score = int(text_score)
+        if score < 0:
+            continue
+        if score > 15:
+            continue
+        scores.append(score)
+    return scores
 
 
 def add_quiz_score(user_id, channel_id, score, ts):
@@ -107,7 +113,11 @@ def get_leaderboard_block(leaderboard):
         "text": {
             "type": "mrkdwn",
             "text": "\n".join(
-                f"{line['name']} `{line['average_score']:.1f}` _({line['total_quizzes']} quiz{'' if line['total_quizzes'] == 1 else 'zes'})_"
+                (
+                    f"{line['name']} "
+                    f"`{line['recent_average']:.1f}` _(last {line['recent_quizzes']})_ "
+                    f"`{line['average_score']:.1f}` _({line['total_quizzes']} quiz{'' if line['total_quizzes'] == 1 else 'zes'})_"
+                )
                 for line in leaderboard
             )
         }
@@ -157,8 +167,8 @@ def message(**payload):
         if channel_name.lstrip('#') != QUIZ_CHANNEL.lstrip('#'):
             return
 
-        score = parse_text_for_score(text)
-        if score is None:
+        scores = parse_text_for_scores(text)
+        if not scores:
             return
 
         # who da perp?
@@ -166,16 +176,17 @@ def message(**payload):
         if not user_name:
             return
 
-        # add score
-        print(f'adding score {score} for user {user_name}')
-        add_quiz_score(user_id, channel_id, score, ts)
+        # add scores
+        for score in scores:
+            print(f'adding score {score} for user {user_name}')
+            add_quiz_score(user_id, channel_id, score, ts)
 
-        # is the score reaction-worthy?
-        if score in (0, 1):
-            add_reaction('exploding_head', channel_id, ts, web_client)
+            # is the score reaction-worthy?
+            if score in (0, 1):
+                add_reaction('exploding_head', channel_id, ts, web_client)
 
-        elif score in (14, 15):
-            add_reaction('fire', channel_id, ts, web_client)
+            elif score in (14, 15):
+                add_reaction('fire', channel_id, ts, web_client)
 
     except Exception as e:
         print(f'exception in message(): {e}')

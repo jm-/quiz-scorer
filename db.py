@@ -91,9 +91,10 @@ class Database():
 
     def get_leaderboard(self):
         self._execute(
-            'SELECT scores.user_id, users.name, scores.score '
+            'SELECT scores.user_id, users.name, scores.score, scores.ts '
             'FROM scores '
-            'JOIN users ON scores.user_id = users.id;'
+            'JOIN users ON scores.user_id = users.id '
+            'ORDER BY scores.ts DESC;'
         )
         rows = self.cursor.fetchall()
         if len(rows) == 0:
@@ -110,7 +111,9 @@ class Database():
         for user in users.keys():
             users[user]['total_quizzes'] = len(users[user]['scores'])
             users[user]['average_score'] = sum(users[user]['scores']) / len(users[user]['scores'])
+            users[user]['recent_quizzes'] = len(users[user]['scores'][:10])
+            users[user]['recent_average'] = sum(users[user]['scores'][:10]) / len(users[user]['scores'][:10])
         leaderboard = []
-        for user in sorted(users.keys(), key=lambda u: users[u]['average_score'], reverse=True):
+        for user in sorted(users.keys(), key=lambda u: users[u]['recent_average'], reverse=True):
             leaderboard.append(users[user])
         return leaderboard
