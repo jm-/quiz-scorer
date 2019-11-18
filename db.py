@@ -117,3 +117,21 @@ class Database():
         for user in sorted(users.keys(), key=lambda u: users[u]['recent_average'], reverse=True):
             leaderboard.append(users[user])
         return leaderboard
+
+
+    def find_users_by_name_substring(self, name_substring):
+        self._execute(
+            'SELECT id, name FROM users WHERE name LIKE ?;',
+            (name_substring, )
+        )
+        return self.cursor.fetchall()
+
+
+    def find_recent_scores_by_user_id(self, user_id, count):
+        self._execute(
+            'SELECT score FROM scores WHERE user_id = ? ORDER BY ts DESC LIMIT ?;',
+            (user_id, count)
+        )
+        rows = self.cursor.fetchall()
+        scores = list(row[0] for row in rows)
+        return scores

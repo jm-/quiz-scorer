@@ -5,6 +5,7 @@ import slack
 import ssl as ssl_lib
 import certifi
 import threading
+import datetime
 
 from db import Database
 from stuffquiz import StuffQuiz, StuffQuizPoller
@@ -12,6 +13,8 @@ from stuffquiz import StuffQuiz, StuffQuizPoller
 
 QUIZ_CHANNEL    = '#quizscores'
 DATABASE_NAME   = 'quiz-scorer.db'
+
+QUIZ_DAYS_OF_WEEK = (0, 1, 2, 3, 4)
 
 
 def get_channel_name(channel_id, web_client):
@@ -107,6 +110,16 @@ def alert_channel_about_new_stuff_quiz(stuff_quiz, web_client):
     )
 
 
+def on_new_stuff_quiz(stuff_quiz, web_client):
+    # check the day of week
+    now = datetime.datetime.now()
+    weekday = now.weekday()
+    if weekday not in QUIZ_DAYS_OF_WEEK:
+        return
+    # send message
+    alert_channel_about_new_stuff_quiz(stuff_quiz, web_client)
+
+
 def get_leaderboard_block(leaderboard):
     return {
         "type": "section",
@@ -134,6 +147,46 @@ def write_leaderboard_to_channel(channel_id, web_client):
     )
 
 
+def write_mrkdwn_to_channel(mrkdwn, channel_id, web_client):
+    web_client.chat_postMessage(
+        channel=channel_id,
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": mrkdwn
+                }
+            }
+        ]
+    )
+
+
+def write_recent_scores_to_channel(channel_id, name_substring, count, web_client):
+    with Database(DATABASE_NAME) as db:
+        # try and find a single user
+        users = db.find_users_by_name_substring(name_substring)
+        if len(users) == 0:
+            write_mrkdwn_to_channel(
+                'No users found',
+                channel_id,
+                web_client
+            )
+            return
+        elif len(users) > 1:
+            write_mrkdwn_to_channel(
+                'Multiple users found, please be specific',
+                channel_id,
+                web_client
+            )
+            return
+        (user_id, user_name) = users[0]
+        scores = db.find_recent_scores_by_user_id(user_id, count)
+        score_text = ' '.join(f'`{score}`' for score in scores)
+        mrkdwn = f"{user_name}'s last {len(scores)} scores: {score_text}"
+        write_mrkdwn_to_channel(mrkdwn, channel_id, web_client)
+
+
 @slack.RTMClient.run_on(event="message")
 def message(**payload):
     data = payload["data"]
@@ -149,11 +202,22 @@ def message(**payload):
     #print(user_id)
     #print(text)
 
+    if not text:
+        return
+
     if text == '!leaderboard':
         try:
             write_leaderboard_to_channel(channel_id, web_client)
         except Exception as e:
             print(f'could not write leaderboard: {e}')
+        return
+
+    elif text.startswith('!last10 '):
+        try:
+            name_substring = text[8:]
+            write_recent_scores_to_channel(channel_id, name_substring, 10, web_client)
+        except Exception as e:
+            print(f'could not get last 10 scores: {e}')
         return
 
     # TODO: more commands e.g. personal scores
@@ -207,7 +271,7 @@ if __name__ == "__main__":
 
     # start the stuff quiz poller
     sq_poller = StuffQuizPoller()
-    sq_poller.on_new_stuff_quiz = lambda sq: alert_channel_about_new_stuff_quiz(sq, web_client)
+    sq_poller.on_new_stuff_quiz = lambda sq: on_new_stuff_quiz(sq, web_client)
     sq_poller.start()
 
     rtm_client.start()
