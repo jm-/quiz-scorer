@@ -6,6 +6,8 @@ import ssl as ssl_lib
 import certifi
 import threading
 import datetime
+import math
+import time
 
 from db import Database
 from stuffquiz import StuffQuiz, StuffQuizPoller
@@ -120,7 +122,10 @@ def on_new_stuff_quiz(stuff_quiz, web_client):
     alert_channel_about_new_stuff_quiz(stuff_quiz, web_client)
 
 
-def get_leaderboard_block(leaderboard):
+def get_full_leaderboard_block(leaderboard):
+    '''
+    this needs work
+    '''
     return {
         "type": "section",
         "text": {
@@ -137,9 +142,49 @@ def get_leaderboard_block(leaderboard):
     }
 
 
+def get_leaderboard_block(leaderboard):
+    # split the leaderboard into 2 columns
+    # if the number of users is odd, put the extra entry in the first column
+    midpoint = int(math.ceil(len(leaderboard) / 2))
+    return {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": "Average of recent _(last 10)_ scores:"
+        },
+        "fields": [
+            {
+                "type": "mrkdwn",
+                "text": "\n".join(
+                    (
+                        f"*{index + 1}*. {line['name']} "
+                        f"`{line['recent_average']:.1f}` "
+                        f"`{'+' if line['recent_difference'] >= 0 else ''}{line['recent_difference']:.1f}` "
+                    )
+                    for index, line in enumerate(leaderboard[:midpoint])
+                )
+            },
+            {
+                "type": "mrkdwn",
+                "text": "\n".join(
+                    (
+                        f"*{index + 1 + midpoint}*. {line['name']} "
+                        f"`{line['recent_average']:.1f}` "
+                        f"`{'+' if line['recent_difference'] >= 0 else ''}{line['recent_difference']:.1f}` "
+                    )
+                    for index, line in enumerate(leaderboard[midpoint:])
+                )
+            }
+        ]
+    }
+
+
 def write_leaderboard_to_channel(channel_id, web_client):
     with Database(DATABASE_NAME) as db:
+        t0 = time.time()
         leaderboard = db.get_leaderboard()
+        t1 = time.time()
+        print(f'DEBUG got leaderboard from db in {(t1-t0):.2f}s')
     block = get_leaderboard_block(leaderboard)
     web_client.chat_postMessage(
         channel=channel_id,

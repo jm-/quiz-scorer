@@ -113,6 +113,10 @@ class Database():
             users[user]['average_score'] = sum(users[user]['scores']) / len(users[user]['scores'])
             users[user]['recent_quizzes'] = len(users[user]['scores'][:10])
             users[user]['recent_average'] = sum(users[user]['scores'][:10]) / len(users[user]['scores'][:10])
+            users[user]['recent_1_11_quizzes'] = len(users[user]['scores'][1:11])
+            users[user]['recent_1_11_average'] = sum(users[user]['scores'][1:11]) / max(1, len(users[user]['scores'][1:11]))
+            # calculate difference
+            users[user]['recent_difference'] = users[user]['recent_average'] - users[user]['recent_1_11_average']
         leaderboard = []
         for user in sorted(users.keys(), key=lambda u: users[u]['recent_average'], reverse=True):
             leaderboard.append(users[user])
