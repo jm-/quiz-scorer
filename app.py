@@ -250,14 +250,14 @@ def message(**payload):
     if not text:
         return
 
-    if text == '!leaderboard':
+    if text.lower() == '!leaderboard':
         try:
             write_leaderboard_to_channel(channel_id, web_client)
         except Exception as e:
             print(f'could not write leaderboard: {e}')
         return
 
-    elif text.startswith('!last10 '):
+    elif text.lower().startswith('!last10 '):
         try:
             name_substring = text[8:]
             write_recent_scores_to_channel(channel_id, name_substring, 10, web_client)
@@ -312,11 +312,20 @@ if __name__ == "__main__":
     proxy = os.environ["PROXY"]
 
     web_client = slack.WebClient(token=slack_token, ssl=ssl_context, proxy=proxy)
-    rtm_client = slack.RTMClient(token=slack_token, ssl=ssl_context, proxy=proxy)
 
     # start the stuff quiz poller
     sq_poller = StuffQuizPoller()
     sq_poller.on_new_stuff_quiz = lambda sq: on_new_stuff_quiz(sq, web_client)
     sq_poller.start()
 
-    rtm_client.start()
+    while True:
+        try:
+            rtm_client = slack.RTMClient(token=slack_token, ssl=ssl_context, proxy=proxy)
+            rtm_client.start()
+        except KeyboardInterrupt:
+            print('exiting...')
+            break
+        except Exception as e:
+            print(f'a (slack) exception occurred: {e}')
+        # don't reconnect too soon
+        time.sleep(30)
