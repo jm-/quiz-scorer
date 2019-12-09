@@ -329,3 +329,7 @@ if __name__ == "__main__":
             print(f'a (slack) exception occurred: {e}')
         # don't reconnect too soon
         time.sleep(30)
+
+    # stop the stuff quiz poller
+    sq_poller.stop()
+    sq_poller.join()

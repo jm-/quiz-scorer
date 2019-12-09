@@ -8,7 +8,8 @@ from bs4 import BeautifulSoup
 
 STUFF_BASE_URL  = 'https://www.stuff.co.nz'
 QUIZ_LIST_URL   = STUFF_BASE_URL + '/national/quizzes'
-SLEEP_SECONDS   = 90
+SLEEP_SECONDS   = 5
+SLEEP_TIMES     = 19
 
 
 class StuffQuiz():
@@ -20,16 +21,17 @@ class StuffQuiz():
 
 class StuffQuizPoller(threading.Thread):
     def run(self):
+        self.alive = True
         self.initialize()
-        time.sleep(SLEEP_SECONDS)
-        while True:
+        self.sleep()
+        while self.alive:
             try:
                 stuff_quizzes = self.get_stuff_quizzes()
             except Exception as e:
                 print(f'error getting stuff quizzes: {e}')
             else:
                 self.process_stuff_quizzes(stuff_quizzes)
-            time.sleep(SLEEP_SECONDS)
+            self.sleep()
 
 
     def initialize(self):
@@ -67,6 +69,17 @@ class StuffQuizPoller(threading.Thread):
                 self.on_new_stuff_quiz(stuff_quiz)
             # add url
             self.stuff_quiz_urls.add(stuff_quiz.url)
+
+
+    def sleep(self):
+        i = 0
+        while i < SLEEP_TIMES and self.alive:
+            time.sleep(SLEEP_SECONDS)
+            i += 1
+
+
+    def stop(self):
+        self.alive = False
 
 
 if __name__ == '__main__':

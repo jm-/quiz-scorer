@@ -96,17 +96,16 @@ class Database():
             'JOIN users ON scores.user_id = users.id '
             'ORDER BY scores.ts DESC;'
         )
-        rows = self.cursor.fetchall()
-        if len(rows) == 0:
-            return None
         users = {}
-        for row in rows:
+        for row in self.cursor:
             if row[0] not in users:
                 users[row[0]] = {
                     'name': row[1],
                     'scores': []
                 }
             users[row[0]]['scores'].append(row[2])
+        if len(users) == 0:
+            return None
         # calculate average and total
         for user in users.keys():
             users[user]['total_quizzes'] = len(users[user]['scores'])
