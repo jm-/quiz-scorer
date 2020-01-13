@@ -8,6 +8,7 @@ import threading
 import datetime
 import math
 import time
+from multiprocessing import Pool
 
 from db import Database
 from stuffquiz import StuffQuiz, StuffQuizPoller
@@ -17,6 +18,8 @@ QUIZ_CHANNEL    = '#quizscores'
 DATABASE_NAME   = 'quiz-scorer.db'
 
 QUIZ_DAYS_OF_WEEK = (0, 1, 2, 3, 4)
+
+PROCESS_POOL = None
 
 
 def get_channel_name(channel_id, web_client):
@@ -179,12 +182,16 @@ def get_leaderboard_block(leaderboard):
     }
 
 
-def write_leaderboard_to_channel(channel_id, web_client):
+def get_leaderboard():
     with Database(DATABASE_NAME) as db:
-        t0 = time.time()
-        leaderboard = db.get_leaderboard()
-        t1 = time.time()
-        print(f'DEBUG got leaderboard from db in {(t1-t0):.2f}s')
+        return db.get_leaderboard()
+
+
+def write_leaderboard_to_channel(channel_id, web_client):
+    t0 = time.time()
+    leaderboard = PROCESS_POOL.apply(get_leaderboard)
+    t1 = time.time()
+    print(f'DEBUG got leaderboard from db in {(t1-t0):.2f}s')
     block = get_leaderboard_block(leaderboard)
     web_client.chat_postMessage(
         channel=channel_id,
@@ -307,6 +314,8 @@ if __name__ == "__main__":
     with Database(DATABASE_NAME) as db:
         db.initialize()
 
+    PROCESS_POOL = Pool(2)
+
     ssl_context = ssl_lib.create_default_context(cafile=certifi.where())
     slack_token = os.environ["SLACK_BOT_TOKEN"]
     proxy = os.environ["PROXY"]
@@ -330,6 +339,9 @@ if __name__ == "__main__":
         # don't reconnect too soon
         time.sleep(30)
 
-    # stop the stuff quiz poller
+    # stop the stuff quiz poller and process pool
     sq_poller.stop()
+    PROCESS_POOL.close()
+
     sq_poller.join()
+    PROCESS_POOL.join()
