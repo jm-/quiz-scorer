@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import threading
 
@@ -8,15 +9,19 @@ from bs4 import BeautifulSoup
 
 STUFF_BASE_URL  = 'https://www.stuff.co.nz'
 QUIZ_LIST_URL   = STUFF_BASE_URL + '/national/quizzes'
+QUIZ_ID_PATTERN = r'/quizzes/([0-9]+)/'
 SLEEP_SECONDS   = 5
 SLEEP_TIMES     = 19
 
 
 class StuffQuiz():
     def __init__(self, name, href):
+        self.id = re.search(QUIZ_ID_PATTERN, href).group(1)
         self.name = name.strip()
         self.href = href
         self.url = STUFF_BASE_URL + href
+        # this requires a GET
+        self.ts = None
 
 
 class StuffQuizPoller(threading.Thread):
@@ -59,11 +64,25 @@ class StuffQuizPoller(threading.Thread):
         return stuff_quizzes
 
 
+    def attach_stuff_quiz_details(self, stuff_quiz):
+        # makes a request for more details about this quiz
+        http = urllib3.ProxyManager(os.environ["PROXY"])
+        response = http.request(
+            'GET',
+            stuff_quiz.url
+        )
+        soup = BeautifulSoup(response.data, 'html.parser')
+        quiz_date = soup.select('.sics-component__byline__date')[0].text
+        quiz_ts = time.mktime(time.strptime(quiz_date, '%H:%M, %b %d %Y'))
+        stuff_quiz.ts = str(quiz_ts)
+
+
     def process_stuff_quizzes(self, stuff_quizzes):
         for stuff_quiz in stuff_quizzes:
             if stuff_quiz.url in self.stuff_quiz_urls:
                 continue
             # this is a new quiz!
+            self.attach_stuff_quiz_details(stuff_quiz)
             print(f'new stuff quiz: {stuff_quiz.name}')
             if self.on_new_stuff_quiz:
                 self.on_new_stuff_quiz(stuff_quiz)

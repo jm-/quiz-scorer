@@ -75,29 +75,75 @@ def add_reaction(name, channel_id, ts, web_client):
         print(f'exception while adding reaction: {e}')
 
 
+def parse_text_for_marker(text, markers):
+    for marker in markers:
+        if marker in text:
+            return True
+    return False
+
+
+def parse_text_for_morning(text):
+    return parse_text_for_marker(text.lower(), ('am', 'a.m', 'morning'))
+
+
+def parse_text_for_afternoon(text):
+    return parse_text_for_marker(text.lower(), ('pm', 'p.m', 'afternoon'))
+
+
+def parse_text_for_yesterday(text):
+    return parse_text_for_marker(text.lower(), ('yesterday',))
+
+
 def parse_text_for_scores(text):
-    try:
-        text_scores = re.findall(r'([0-9]{1,2})/15', text)
-    except Exception as e:
-        print(f'exception parsing text for score: {e} ({text})')
-        return None
+    '''
+    returns scores in the given text as a list of
+    [
+        (score, is_am, is_pm, is_yesterday)
+        ...
+    ]
+    '''
+    parsed_scores = []
+    for line in text.split('\n'):
+        try:
+            text_scores = re.findall(r'([0-9]{1,2})/15', line)
+        except Exception as e:
+            print(f'exception parsing text for score: {e} ({text})')
+        else:
+            if not text_scores:
+                continue
+            # use the first score on this line
+            score = int(text_scores[0])
+            if score < 0:
+                continue
+            if score > 15:
+                continue
+            parsed_scores.append((
+                score,
+                parse_text_for_morning(line),
+                parse_text_for_afternoon(line),
+                parse_text_for_yesterday(line)
+            ))
+    return parsed_scores
 
-    if not text_scores:
-        return []
-    scores = []
-    for text_score in text_scores:
-        score = int(text_score)
-        if score < 0:
-            continue
-        if score > 15:
-            continue
-        scores.append(score)
-    return scores
 
-
-def add_quiz_score(user_id, channel_id, score, ts):
+def add_stuff_quiz(stuff_quiz):
     with Database(DATABASE_NAME) as db:
-        db.add_score(user_id, channel_id, score, ts)
+        db.add_quiz(stuff_quiz.id, stuff_quiz.name, stuff_quiz.url, stuff_quiz.ts)
+
+
+def try_add_quiz_score(user_id, channel_id, score, is_am, is_pm, is_yesterday, ts):
+    with Database(DATABASE_NAME) as db:
+        # get the quiz this score is for
+        quiz = db.find_quiz(ts, is_am, is_pm, is_yesterday)
+        if not quiz:
+            return 'quiz could not be found'
+        # check if a score has not already been added
+        existing_score = db.find_quiz_score(user_id, quiz[0])
+        if existing_score is not None:
+            return f'already added score `{existing_score}` for this quiz'
+        # store score
+        db.add_score(user_id, quiz[0], channel_id, score, ts)
+        return None
 
 
 def alert_channel_about_new_stuff_quiz(stuff_quiz, web_client):
@@ -108,7 +154,7 @@ def alert_channel_about_new_stuff_quiz(stuff_quiz, web_client):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"new quiz :tada: <{stuff_quiz.url}|{stuff_quiz.name}>"
+                    "text": f"new quiz :point_right: <{stuff_quiz.url}|{stuff_quiz.name}>"
                 }
             }
         ]
@@ -121,27 +167,46 @@ def on_new_stuff_quiz(stuff_quiz, web_client):
     weekday = now.weekday()
     if weekday not in QUIZ_DAYS_OF_WEEK:
         return
+    # add quiz to db
+    add_stuff_quiz(stuff_quiz)
     # send message
     alert_channel_about_new_stuff_quiz(stuff_quiz, web_client)
 
 
-def get_full_leaderboard_block(leaderboard):
-    '''
-    this needs work
-    '''
+def get_leaderboard_block_all_time(leaderboard):
+    # split the leaderboard into 2 columns
+    # if the number of users is odd, put the extra entry in the first column
+    midpoint = int(math.ceil(len(leaderboard) / 2))
     return {
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": "\n".join(
-                (
-                    f"{line['name']} "
-                    f"`{line['recent_average']:.1f}` _(last {line['recent_quizzes']})_ "
-                    f"`{line['average_score']:.1f}` _({line['total_quizzes']} quiz{'' if line['total_quizzes'] == 1 else 'zes'})_"
+            "text": "Average all-time scores:"
+        },
+        "fields": [
+            {
+                "type": "mrkdwn",
+                "text": "\n".join(
+                    (
+                        f"*{index + 1}*. {line['name']} "
+                        f"`{line['average_score']:.1f}` "
+                        f"_({line['total_quizzes']} quiz{'' if line['total_quizzes'] == 1 else 'zes'})_"
+                    )
+                    for index, line in enumerate(leaderboard[:midpoint])
                 )
-                for line in leaderboard
-            )
-        }
+            },
+            {
+                "type": "mrkdwn",
+                "text": "\n".join(
+                    (
+                        f"*{index + 1 + midpoint}*. {line['name']} "
+                        f"`{line['average_score']:.1f}` "
+                        f"_({line['total_quizzes']} quiz{'' if line['total_quizzes'] == 1 else 'zes'})_"
+                    )
+                    for index, line in enumerate(leaderboard[midpoint:])
+                )
+            }
+        ]
     }
 
 
@@ -182,20 +247,91 @@ def get_leaderboard_block(leaderboard):
     }
 
 
-def get_leaderboard():
+def get_quiz_stats_blocks(quiz_stats):
+    # split into easiest and hardest
+    midpoint = int(math.ceil(len(quiz_stats) / 2))
+    easiest_quizzes = quiz_stats[:midpoint][:3]
+    hardest_quizzes = list(reversed(quiz_stats[midpoint:][-3:]))
+
+    def get_winner_mrkdwn(line):
+        if line['is_draw']:
+            return 'draw'
+        return f"won by {line['win']['user_name']} with `{line['win']['score']}`"
+
+    return [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "\n".join((
+                    f"Top {len(hardest_quizzes)} hardest quiz{'' if len(hardest_quizzes) == 1 else 'zes'}:",
+                    "\n".join(
+                        (
+                            f"*{index + 1}*. <{line['url']}|{line['name']}> "
+                            f"`{line['average_score']:.1f}` "
+                            f"_({line['total_scores']} score{'' if line['total_scores'] == 1 else 's'})_ "
+                            f"_({get_winner_mrkdwn(line)})_"
+                        )
+                        for index, line in enumerate(hardest_quizzes)
+                    )
+                ))
+            }
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "\n".join((
+                    f"Top {len(easiest_quizzes)} easiest quiz{'' if len(easiest_quizzes) == 1 else 'zes'}:",
+                    "\n".join(
+                        (
+                            f"*{index + 1}*. <{line['url']}|{line['name']}> "
+                            f"`{line['average_score']:.1f}` "
+                            f"_({line['total_scores']} score{'' if line['total_scores'] == 1 else 's'})_ "
+                            f"_({get_winner_mrkdwn(line)})_"
+                        )
+                        for index, line in enumerate(easiest_quizzes)
+                    )
+                ))
+            }
+        }
+    ]
+
+
+def get_leaderboard(is_all_time=False):
     with Database(DATABASE_NAME) as db:
-        return db.get_leaderboard()
+        return db.get_leaderboard(is_all_time)
 
 
-def write_leaderboard_to_channel(channel_id, web_client):
+def get_quiz_stats():
+    with Database(DATABASE_NAME) as db:
+        return db.get_quiz_stats()
+
+
+def write_leaderboard_to_channel(channel_id, web_client, is_all_time=False):
     t0 = time.time()
-    leaderboard = PROCESS_POOL.apply(get_leaderboard)
+    leaderboard = PROCESS_POOL.apply(get_leaderboard, (is_all_time,))
     t1 = time.time()
     print(f'DEBUG got leaderboard from db in {(t1-t0):.2f}s')
-    block = get_leaderboard_block(leaderboard)
+    if is_all_time:
+        block = get_leaderboard_block_all_time(leaderboard)
+    else:
+        block = get_leaderboard_block(leaderboard)
     web_client.chat_postMessage(
         channel=channel_id,
         blocks=[block]
+    )
+
+
+def write_quiz_stats_to_channel(channel_id, web_client):
+    t0 = time.time()
+    quiz_stats = PROCESS_POOL.apply(get_quiz_stats)
+    t1 = time.time()
+    print(f'DEBUG got quiz stats from db in {(t1-t0):.2f}s')
+    blocks = get_quiz_stats_blocks(quiz_stats)
+    web_client.chat_postMessage(
+        channel=channel_id,
+        blocks=blocks
     )
 
 
@@ -257,11 +393,19 @@ def message(**payload):
     if not text:
         return
 
-    if text.lower() == '!leaderboard':
+    if text.lower().startswith('!leaderboard'):
         try:
-            write_leaderboard_to_channel(channel_id, web_client)
+            is_all_time = text.lower().endswith('all-time') or text.lower().endswith('alltime')
+            write_leaderboard_to_channel(channel_id, web_client, is_all_time)
         except Exception as e:
             print(f'could not write leaderboard: {e}')
+        return
+
+    elif text.lower() == '!quizstats':
+        try:
+            write_quiz_stats_to_channel(channel_id, web_client)
+        except Exception as e:
+            print(f'could not write quiz stats: {e}')
         return
 
     elif text.lower().startswith('!last10 '):
@@ -283,8 +427,8 @@ def message(**payload):
         if channel_name.lstrip('#') != QUIZ_CHANNEL.lstrip('#'):
             return
 
-        scores = parse_text_for_scores(text)
-        if not scores:
+        parsed_scores = parse_text_for_scores(text)
+        if not parsed_scores:
             return
 
         # who da perp?
@@ -293,9 +437,17 @@ def message(**payload):
             return
 
         # add scores
-        for score in scores:
+        for score, is_am, is_pm, is_yesterday in parsed_scores:
             print(f'adding score {score} for user {user_name}')
-            add_quiz_score(user_id, channel_id, score, ts)
+            error_message = try_add_quiz_score(user_id, channel_id, score, is_am, is_pm, is_yesterday, ts)
+
+            if error_message is not None:
+                write_mrkdwn_to_channel(
+                    f'Your score `{score}` could not be added: {error_message}',
+                    channel_id,
+                    web_client
+                )
+                continue
 
             # is the score reaction-worthy?
             if score in (0, 1):
