@@ -86,11 +86,25 @@ class Database():
         )
 
 
+    def get_quiz_by_id(self, quiz_id):
+        self._execute(
+            'SELECT id, name, url, ts '
+            'FROM quizzes '
+            'WHERE id = ?;',
+            (quiz_id,)
+        )
+        rows = self.cursor.fetchall()
+        if rows:
+            return rows[0]
+        return None
+
+
     def add_quiz(self, quiz_id, quiz_name, quiz_url, quiz_ts):
         self._execute(
             'INSERT INTO quizzes (id, name, url, ts) VALUES (?, ?, ?, ?);',
             (quiz_id, quiz_name, quiz_url, quiz_ts)
         )
+
 
 
     def add_score(self, user_id, quiz_id, channel_id, score, ts):
@@ -152,11 +166,13 @@ class Database():
 
 
     def get_leaderboard(self, is_all_time=False):
+        # sorted by quiz id (more reliable than time!) then score time
         self._execute(
             'SELECT scores.user_id, users.name, scores.score, scores.ts '
             'FROM scores '
             'JOIN users ON scores.user_id = users.id '
-            'ORDER BY scores.ts DESC;'
+            'LEFT OUTER JOIN quizzes ON scores.quiz_id = quizzes.id '
+            'ORDER BY quizzes.ts DESC, scores.ts DESC;'
         )
         users = {}
         for row in self.cursor:
@@ -238,7 +254,12 @@ class Database():
 
     def find_recent_scores_by_user_id(self, user_id, count):
         self._execute(
-            'SELECT score FROM scores WHERE user_id = ? ORDER BY ts DESC LIMIT ?;',
+            'SELECT scores.score '
+            'FROM scores '
+            'LEFT OUTER JOIN quizzes ON scores.quiz_id = quizzes.id '
+            'WHERE scores.user_id = ? '
+            'ORDER BY quizzes.ts DESC, scores.ts DESC '
+            'LIMIT ?;',
             (user_id, count)
         )
         rows = self.cursor.fetchall()

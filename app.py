@@ -75,6 +75,10 @@ def add_reaction(name, channel_id, ts, web_client):
         print(f'exception while adding reaction: {e}')
 
 
+def strip_emojis(line):
+    return re.sub(r':[0-9A-Za-z._-]+:', '', line)
+
+
 def parse_text_for_marker(text, markers):
     for marker in markers:
         if marker in text:
@@ -117,11 +121,12 @@ def parse_text_for_scores(text):
                 continue
             if score > 15:
                 continue
+            text_line = strip_emojis(line)
             parsed_scores.append((
                 score,
-                parse_text_for_morning(line),
-                parse_text_for_afternoon(line),
-                parse_text_for_yesterday(line)
+                parse_text_for_morning(text_line),
+                parse_text_for_afternoon(text_line),
+                parse_text_for_yesterday(text_line)
             ))
     return parsed_scores
 
@@ -129,6 +134,11 @@ def parse_text_for_scores(text):
 def add_stuff_quiz(stuff_quiz):
     with Database(DATABASE_NAME) as db:
         db.add_quiz(stuff_quiz.id, stuff_quiz.name, stuff_quiz.url, stuff_quiz.ts)
+
+
+def get_stuff_quiz_by_id(stuff_quiz_id):
+    with Database(DATABASE_NAME) as db:
+        return db.get_quiz_by_id(stuff_quiz_id)
 
 
 def try_add_quiz_score(user_id, channel_id, score, is_am, is_pm, is_yesterday, ts):
@@ -154,7 +164,7 @@ def alert_channel_about_new_stuff_quiz(stuff_quiz, web_client):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"new quiz :point_right: <{stuff_quiz.url}|{stuff_quiz.name}>"
+                    "text": f"new quiz :sparkles: <{stuff_quiz.url}|{stuff_quiz.name}>"
                 }
             }
         ]
@@ -163,10 +173,15 @@ def alert_channel_about_new_stuff_quiz(stuff_quiz, web_client):
 
 def on_new_stuff_quiz(stuff_quiz, web_client):
     # check the day of week
-    now = datetime.datetime.now()
-    weekday = now.weekday()
+    quiz_ts_datetime = datetime.datetime.fromtimestamp(float(stuff_quiz.ts))
+    weekday = quiz_ts_datetime.weekday()
     if weekday not in QUIZ_DAYS_OF_WEEK:
         return
+    # see if the quiz already exists in the db
+    existing_stuff_quiz = get_stuff_quiz_by_id(stuff_quiz.id)
+    if existing_stuff_quiz:
+        return
+    print(f'new stuff quiz: {stuff_quiz.name}')
     # add quiz to db
     add_stuff_quiz(stuff_quiz)
     # send message
@@ -414,6 +429,26 @@ def message(**payload):
             write_recent_scores_to_channel(channel_id, name_substring, 10, web_client)
         except Exception as e:
             print(f'could not get last 10 scores: {e}')
+        return
+
+    elif text.lower().startswith('!last '):
+        try:
+            cmd, num, name_substring = text.split()
+            int_num = int(num)
+            if int_num <= 0:
+                add_reaction('dusty_stick', channel_id, ts, web_client)
+                return
+            elif int_num > 1000:
+                write_mrkdwn_to_channel(
+                    f'Limit = 1000',
+                    channel_id,
+                    web_client
+                )
+                return
+
+            write_recent_scores_to_channel(channel_id, name_substring, int_num, web_client)
+        except Exception as e:
+            print(f'could not get last scores: {e}')
         return
 
     # TODO: more commands e.g. personal scores

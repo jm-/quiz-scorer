@@ -27,8 +27,6 @@ class StuffQuiz():
 class StuffQuizPoller(threading.Thread):
     def run(self):
         self.alive = True
-        self.initialize()
-        self.sleep()
         while self.alive:
             try:
                 stuff_quizzes = self.get_stuff_quizzes()
@@ -37,14 +35,6 @@ class StuffQuizPoller(threading.Thread):
             else:
                 self.process_stuff_quizzes(stuff_quizzes)
             self.sleep()
-
-
-    def initialize(self):
-        self.stuff_quiz_urls = set()
-        stuff_quizzes = self.get_stuff_quizzes()
-        for stuff_quiz in stuff_quizzes:
-            self.stuff_quiz_urls.add(stuff_quiz.url)
-        print(f'loaded {len(stuff_quizzes)} stuff quizzes')
 
 
     def get_stuff_quizzes(self):
@@ -79,15 +69,9 @@ class StuffQuizPoller(threading.Thread):
 
     def process_stuff_quizzes(self, stuff_quizzes):
         for stuff_quiz in stuff_quizzes:
-            if stuff_quiz.url in self.stuff_quiz_urls:
-                continue
-            # this is a new quiz!
-            self.attach_stuff_quiz_details(stuff_quiz)
-            print(f'new stuff quiz: {stuff_quiz.name}')
-            if self.on_new_stuff_quiz:
+            if hasattr(self, 'on_new_stuff_quiz'):
+                self.attach_stuff_quiz_details(stuff_quiz)
                 self.on_new_stuff_quiz(stuff_quiz)
-            # add url
-            self.stuff_quiz_urls.add(stuff_quiz.url)
 
 
     def sleep(self):
