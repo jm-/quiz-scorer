@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 
 STUFF_BASE_URL  = 'https://www.stuff.co.nz'
 QUIZ_LIST_URL   = STUFF_BASE_URL + '/national/quizzes'
-QUIZ_ID_PATTERN = r'/quizzes/([0-9]+)/'
+QUIZ_ID_PATTERN = r'/[A-Za-z0-9._-]+/([0-9]+)/'
 SLEEP_SECONDS   = 5
 SLEEP_TIMES     = 19
 
