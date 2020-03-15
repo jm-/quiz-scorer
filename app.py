@@ -505,9 +505,12 @@ if __name__ == "__main__":
 
     ssl_context = ssl_lib.create_default_context(cafile=certifi.where())
     slack_token = os.environ["SLACK_BOT_TOKEN"]
-    proxy = os.environ["PROXY"]
+    proxy = os.environ.get("PROXY")
 
-    web_client = slack.WebClient(token=slack_token, ssl=ssl_context, proxy=proxy)
+    if proxy:
+        web_client = slack.WebClient(token=slack_token, ssl=ssl_context, proxy=proxy)
+    else:
+        web_client = slack.WebClient(token=slack_token, ssl=ssl_context)
 
     # start the stuff quiz poller
     sq_poller = StuffQuizPoller()
@@ -516,7 +519,10 @@ if __name__ == "__main__":
 
     while True:
         try:
-            rtm_client = slack.RTMClient(token=slack_token, ssl=ssl_context, proxy=proxy)
+            if proxy:
+                rtm_client = slack.RTMClient(token=slack_token, ssl=ssl_context, proxy=proxy)
+            else:
+                rtm_client = slack.RTMClient(token=slack_token, ssl=ssl_context)
             rtm_client.start()
         except KeyboardInterrupt:
             print('exiting...')

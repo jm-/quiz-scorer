@@ -27,6 +27,13 @@ class StuffQuiz():
 class StuffQuizPoller(threading.Thread):
     def run(self):
         self.alive = True
+
+        proxy = os.environ.get("PROXY")
+        if proxy:
+            self.http = urllib3.ProxyManager(proxy)
+        else:
+            self.http = urllib3.PoolManager()
+
         while self.alive:
             try:
                 stuff_quizzes = self.get_stuff_quizzes()
@@ -39,8 +46,7 @@ class StuffQuizPoller(threading.Thread):
 
     def get_stuff_quizzes(self):
         stuff_quizzes = []
-        http = urllib3.ProxyManager(os.environ["PROXY"])
-        response = http.request(
+        response = self.http.request(
             'GET',
             QUIZ_LIST_URL
         )
@@ -56,8 +62,7 @@ class StuffQuizPoller(threading.Thread):
 
     def attach_stuff_quiz_details(self, stuff_quiz):
         # makes a request for more details about this quiz
-        http = urllib3.ProxyManager(os.environ["PROXY"])
-        response = http.request(
+        response = self.http.request(
             'GET',
             stuff_quiz.url
         )
