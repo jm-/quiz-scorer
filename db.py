@@ -167,13 +167,27 @@ class Database():
 
     def get_leaderboard(self, is_all_time=False):
         # sorted by quiz id (more reliable than time!) then score time
-        self._execute(
-            'SELECT scores.user_id, users.name, scores.score, scores.ts '
-            'FROM scores '
-            'JOIN users ON scores.user_id = users.id '
-            'LEFT OUTER JOIN quizzes ON scores.quiz_id = quizzes.id '
-            'ORDER BY quizzes.ts DESC, scores.ts DESC;'
-        )
+        if is_all_time:
+            self._execute(
+                'SELECT scores.user_id, users.name, scores.score, scores.ts '
+                'FROM scores '
+                'JOIN users ON scores.user_id = users.id '
+                'LEFT OUTER JOIN quizzes ON scores.quiz_id = quizzes.id '
+                'ORDER BY quizzes.ts DESC, scores.ts DESC;'
+            )
+        else:
+            # last 28 days worth of scores only
+            cutoff_datetime = datetime.datetime.now().timestamp() - 28 * 24 * 60 * 60
+            self._execute(
+                'SELECT scores.user_id, users.name, scores.score, scores.ts '
+                'FROM scores '
+                'JOIN users ON scores.user_id = users.id '
+                'LEFT OUTER JOIN quizzes ON scores.quiz_id = quizzes.id '
+                'WHERE scores.ts > ? '
+                'ORDER BY quizzes.ts DESC, scores.ts DESC;',
+                (cutoff_datetime,)
+            )
+
         users = {}
         for row in self.cursor:
             if row[0] not in users:
