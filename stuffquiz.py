@@ -37,10 +37,9 @@ class StuffQuizPoller(threading.Thread):
         while self.alive:
             try:
                 stuff_quizzes = self.get_stuff_quizzes()
-            except Exception as e:
-                print(f'error getting stuff quizzes: {e}')
-            else:
                 self.process_stuff_quizzes(stuff_quizzes)
+            except Exception as e:
+                print(f'error getting/processing stuff quizzes: {e}')
             self.sleep()
 
 
@@ -57,7 +56,7 @@ class StuffQuizPoller(threading.Thread):
             href = quiz.attrs['href']
             stuff_quiz = StuffQuiz(name, href)
             stuff_quizzes.append(stuff_quiz)
-        return stuff_quizzes
+        return reversed(stuff_quizzes)
 
 
     def attach_stuff_quiz_details(self, stuff_quiz):
