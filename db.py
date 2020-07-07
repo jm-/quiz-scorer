@@ -106,7 +106,6 @@ class Database():
         )
 
 
-
     def add_score(self, user_id, quiz_id, channel_id, score, ts):
         self._execute(
             'INSERT INTO scores (user_id, quiz_id, channel_id, score, ts) VALUES (?, ?, ?, ?, ?);',
@@ -114,11 +113,9 @@ class Database():
         )
 
 
-    def find_quiz(self, ts, is_am, is_pm, is_yesterday):
+    def find_quiz(self, ts, is_am, is_pm, days_ago=0):
         # shift ts to the correct day
-        timestamp = float(ts)
-        if is_yesterday:
-            timestamp -= (24 * 60 * 60)
+        timestamp = float(ts) - (24 * 60 * 60 * days_ago)
         timestamp_date = datetime.datetime.fromtimestamp(timestamp).date()
         midday = datetime.time(12, 0)
         # get quizzes 24h either side of timestamp

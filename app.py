@@ -17,6 +17,16 @@ from stuffquiz import StuffQuiz, StuffQuizPoller
 QUIZ_CHANNEL    = '#quizscores'
 DATABASE_NAME   = 'quiz-scorer.db'
 
+# aligned with datetime days of the week (monday=0 etc.)
+WEEK_DAYS = (
+    ('monday', 'mon'),
+    ('tuesday', 'tues'),
+    ('wednesday', 'wed'),
+    ('thursday', 'thurs'),
+    ('friday', 'fri'),
+    ('saturday', 'sat'),
+    ('sunday', 'sun')
+)
 QUIZ_DAYS_OF_WEEK = (0, 1, 2, 3, 4)
 
 PROCESS_POOL = None
@@ -98,11 +108,27 @@ def parse_text_for_yesterday(text):
     return parse_text_for_marker(text.lower(), ('yesterday',))
 
 
+def parse_text_for_days_ago(text):
+    text_lower = text.lower()
+    if 'today' in text_lower:
+        return 0
+    if 'yesterday' in text_lower:
+        return 1
+    # what day is today?
+    today_day = datetime.date.today().weekday()
+    # is a weekday name provided?
+    for day, names in enumerate(WEEK_DAYS):
+        if parse_text_for_marker(text_lower, names):
+            return (today_day - day) % 7
+    # assume today
+    return 0
+
+
 def parse_text_for_scores(text):
     '''
     returns scores in the given text as a list of
     [
-        (score, is_am, is_pm, is_yesterday)
+        (score, is_am, is_pm, days_ago)
         ...
     ]
     '''
@@ -126,7 +152,7 @@ def parse_text_for_scores(text):
                 score,
                 parse_text_for_morning(text_line),
                 parse_text_for_afternoon(text_line),
-                parse_text_for_yesterday(text_line)
+                parse_text_for_days_ago(text_line)
             ))
     return parsed_scores
 
@@ -141,10 +167,10 @@ def get_stuff_quiz_by_id(stuff_quiz_id):
         return db.get_quiz_by_id(stuff_quiz_id)
 
 
-def try_add_quiz_score(user_id, channel_id, score, is_am, is_pm, is_yesterday, ts):
+def try_add_quiz_score(user_id, channel_id, score, is_am, is_pm, days_ago, ts):
     with Database(DATABASE_NAME) as db:
         # get the quiz this score is for
-        quiz = db.find_quiz(ts, is_am, is_pm, is_yesterday)
+        quiz = db.find_quiz(ts, is_am, is_pm, days_ago)
         if not quiz:
             return 'quiz could not be found'
         # check if a score has not already been added
@@ -472,9 +498,9 @@ def message(**payload):
             return
 
         # add scores
-        for score, is_am, is_pm, is_yesterday in parsed_scores:
+        for score, is_am, is_pm, days_ago in parsed_scores:
             print(f'adding score {score} for user {user_name}')
-            error_message = try_add_quiz_score(user_id, channel_id, score, is_am, is_pm, is_yesterday, ts)
+            error_message = try_add_quiz_score(user_id, channel_id, score, is_am, is_pm, days_ago, ts)
 
             if error_message is not None:
                 write_mrkdwn_to_channel(
