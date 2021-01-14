@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import datetime
 import threading
 
 import urllib3
@@ -18,6 +19,10 @@ CUSTOM_USER_AGENT = (
     'Chrome/87.0.4280.88 '
     'Safari/537.36'
 )
+QUIZ_POLL_WINDOWS = [
+    (datetime.time( 5, 0), datetime.time( 5, 15)),
+    (datetime.time(15, 0), datetime.time(15, 15))
+]
 
 
 class StuffQuiz():
@@ -33,6 +38,7 @@ class StuffQuiz():
 class StuffQuizPoller(threading.Thread):
     def run(self):
         self.alive = True
+        self.force_check = True
 
         proxy = os.environ.get("PROXY")
         if proxy:
@@ -42,13 +48,27 @@ class StuffQuizPoller(threading.Thread):
 
         while self.alive:
             try:
-                print('retrieving quizzes from stuff...')
-                stuff_quizzes = self.get_stuff_quizzes()
-                print(f'retrieved {len(stuff_quizzes)} quizzes from stuff')
-                self.process_stuff_quizzes(stuff_quizzes)
+                if self.should_check_stuff():
+                    print('retrieving quizzes from stuff...')
+                    stuff_quizzes = self.get_stuff_quizzes()
+                    print(f'retrieved {len(stuff_quizzes)} quizzes from stuff')
+                    self.process_stuff_quizzes(stuff_quizzes)
             except Exception as e:
                 print(f'error getting/processing stuff quizzes: {e}')
             self.sleep()
+
+
+    def should_check_stuff(self):
+        if self.force_check:
+            print('forcing a stuff check')
+            # only check once
+            self.force_check = False
+            return True
+        current_time = datetime.datetime.now().time()
+        for start_time, end_time in QUIZ_POLL_WINDOWS:
+            if start_time < current_time < end_time:
+                return True
+        return False
 
 
     def get_stuff_quizzes(self):
@@ -83,15 +103,15 @@ class StuffQuizPoller(threading.Thread):
 
 
     def process_stuff_quizzes(self, stuff_quizzes):
-        for stuff_quiz in stuff_quizzes:
-            if hasattr(self, 'on_new_stuff_quiz'):
+        if hasattr(self, 'on_new_stuff_quiz'):
+            for stuff_quiz in stuff_quizzes:
                 self.attach_stuff_quiz_details(stuff_quiz)
                 self.on_new_stuff_quiz(stuff_quiz)
 
 
     def sleep(self):
         i = 0
-        while i < SLEEP_TIMES and self.alive:
+        while i < SLEEP_TIMES and self.alive and not self.force_check:
             time.sleep(SLEEP_SECONDS)
             i += 1
 
