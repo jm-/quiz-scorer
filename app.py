@@ -534,13 +534,16 @@ if __name__ == "__main__":
     proxy = os.environ.get("PROXY")
 
     if proxy:
+        print(f'creating web-client with proxy: {proxy}')
         web_client = slack.WebClient(token=slack_token, ssl=ssl_context, proxy=proxy)
     else:
+        print(f'creating web-client without proxy')
         web_client = slack.WebClient(token=slack_token, ssl=ssl_context)
 
     # start the stuff quiz poller
     sq_poller = StuffQuizPoller()
     sq_poller.on_new_stuff_quiz = lambda sq: on_new_stuff_quiz(sq, web_client)
+    print(f'starting sq-poller')
     sq_poller.start()
 
     while True:
@@ -549,6 +552,7 @@ if __name__ == "__main__":
                 rtm_client = slack.RTMClient(token=slack_token, ssl=ssl_context, proxy=proxy)
             else:
                 rtm_client = slack.RTMClient(token=slack_token, ssl=ssl_context)
+            print(f'starting rtm-client')
             rtm_client.start()
         except KeyboardInterrupt:
             print('exiting...')
@@ -559,8 +563,12 @@ if __name__ == "__main__":
         time.sleep(30)
 
     # stop the stuff quiz poller and process pool
+    print(f'stopping sq-poller')
     sq_poller.stop()
+    print(f'closing process-pool')
     PROCESS_POOL.close()
 
     sq_poller.join()
+    print(f'sq-poller has stopped')
     PROCESS_POOL.join()
+    print(f'process-pool is closed')

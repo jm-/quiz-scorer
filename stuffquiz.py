@@ -12,6 +12,12 @@ QUIZ_LIST_URL   = STUFF_BASE_URL + '/national/quizzes'
 QUIZ_ID_PATTERN = r'/[A-Za-z0-9._-]+/([0-9]+)/'
 SLEEP_SECONDS   = 5
 SLEEP_TIMES     = 19
+CUSTOM_USER_AGENT = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/87.0.4280.88 '
+    'Safari/537.36'
+)
 
 
 class StuffQuiz():
@@ -36,7 +42,9 @@ class StuffQuizPoller(threading.Thread):
 
         while self.alive:
             try:
+                print('retrieving quizzes from stuff...')
                 stuff_quizzes = self.get_stuff_quizzes()
+                print(f'retrieved {len(stuff_quizzes)} quizzes from stuff')
                 self.process_stuff_quizzes(stuff_quizzes)
             except Exception as e:
                 print(f'error getting/processing stuff quizzes: {e}')
@@ -47,7 +55,10 @@ class StuffQuizPoller(threading.Thread):
         stuff_quizzes = []
         response = self.http.request(
             'GET',
-            QUIZ_LIST_URL
+            QUIZ_LIST_URL,
+            headers={
+                'User-Agent': CUSTOM_USER_AGENT
+            }
         )
         soup = BeautifulSoup(response.data, 'html.parser')
         quizzes = soup.select('.main_article h3 a')
@@ -56,7 +67,7 @@ class StuffQuizPoller(threading.Thread):
             href = quiz.attrs['href']
             stuff_quiz = StuffQuiz(name, href)
             stuff_quizzes.append(stuff_quiz)
-        return reversed(stuff_quizzes)
+        return list(reversed(stuff_quizzes))
 
 
     def attach_stuff_quiz_details(self, stuff_quiz):
