@@ -511,10 +511,10 @@ def message(**payload):
                 continue
 
             # is the score reaction-worthy?
-            if score in (0, 1):
+            if score in [0, 1]:
                 add_reaction('exploding_head', channel_id, ts, web_client)
 
-            elif score in (14, 15):
+            elif score in [14, 15]:
                 add_reaction('fire', channel_id, ts, web_client)
 
     except Exception as e:

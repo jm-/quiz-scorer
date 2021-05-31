@@ -251,7 +251,10 @@ class Database():
             quizzes[quiz_id]['average_score'] = sum(quizzes[quiz_id]['scores']) / len(quizzes[quiz_id]['scores'])
         quiz_stats = []
         for quiz_id in sorted(quizzes.keys(), key=lambda q: quizzes[q]['average_score'], reverse=True):
-            quiz_stats.append(quizzes[quiz_id])
+            quiz = quizzes[quiz_id]
+            if len(quiz['scores']) > 1:
+                # need to have more than 1 participant to have a winner!
+                quiz_stats.append(quiz)
         return quiz_stats
 
 
