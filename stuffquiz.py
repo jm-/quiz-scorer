@@ -92,6 +92,7 @@ class StuffQuizPoller(threading.Thread):
 
     def attach_stuff_quiz_details(self, stuff_quiz):
         # makes a request for more details about this quiz
+        print(f'retrieving additional data for quiz {stuff_quiz.id} from {stuff_quiz.url}')
         response = self.http.request(
             'GET',
             stuff_quiz.url
@@ -105,8 +106,11 @@ class StuffQuizPoller(threading.Thread):
     def process_stuff_quizzes(self, stuff_quizzes):
         if hasattr(self, 'on_new_stuff_quiz'):
             for stuff_quiz in stuff_quizzes:
-                self.attach_stuff_quiz_details(stuff_quiz)
-                self.on_new_stuff_quiz(stuff_quiz)
+                try:
+                    self.attach_stuff_quiz_details(stuff_quiz)
+                    self.on_new_stuff_quiz(stuff_quiz)
+                except Exception as e:
+                    print(f'could not process stuff quiz {stuff_quiz.id}: {e}')
 
 
     def sleep(self):
